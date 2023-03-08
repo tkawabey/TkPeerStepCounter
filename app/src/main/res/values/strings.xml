@@ -1,0 +1,8 @@
+<resources>
+    <string name="app_name">TkPeerStepCounter</string>
+    <string name="preference_file_key">PrefData</string>
+
+
+    <string name="start">Start</string>
+    <string name="stop">Stop</string>
+</resources>

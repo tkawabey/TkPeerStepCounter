@@ -15,18 +15,13 @@ import android.text.InputFilter
 import android.text.Spanned
 import android.util.Log
 import android.view.View
-import android.widget.Button
-import android.widget.EditText
-import android.widget.Toast
+import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.NotificationCompat
 import kotlin.properties.Delegates
 
 
-/*
-https://cammy.co.jp/technical/c_bytechange/
-https://qiita.com/nwtgck/items/c53db76e19ef80296a71
- */
+
 
 class MainActivity : AppCompatActivity() {
     public val CHANNEL_ID = "tkpeerstepcounter001"
@@ -49,6 +44,13 @@ class MainActivity : AppCompatActivity() {
 
     // Port NumberのEditText
     var mEdtPortNum: EditText by Delegates.notNull<EditText>()
+
+    // Layout
+    var mLayoutNotStart : LinearLayout by Delegates.notNull<LinearLayout>()
+    var mLayoutStarted : LinearLayout by Delegates.notNull<LinearLayout>()
+
+    var mTxtInfo : TextView by Delegates.notNull<TextView>()
+    var mTxtView : TextView by Delegates.notNull<TextView>()
 
     // サービスの実装
     val sendorService: SensorService = SensorService(this)
@@ -89,6 +91,26 @@ class MainActivity : AppCompatActivity() {
         //sendorService.stop()
     }
 
+    // 開始可能な状態の画面表示
+    fun updateViewStartAble()
+    {
+        mBtnStart.isEnabled = true
+        mBtnStart.isClickable = true
+        mBtnStart.text = this.getString(R.string.start)
+        mLayoutNotStart.visibility = View.VISIBLE;
+        mLayoutStarted.visibility = View.GONE;
+    }
+
+    // 停止可能な状態の画面表示
+    fun updateViewStopAble()
+    {
+        mBtnStart.isEnabled = true
+        mBtnStart.isClickable = true
+        mBtnStart.text = this.getString(R.string.stop)
+        mLayoutNotStart.visibility = View.GONE;
+        mLayoutStarted.visibility = View.VISIBLE;
+    }
+
     // センサー一覧を表示するアクティビティーを表示
     fun onClickedStart(view: View) {
         // 入力値をチェックします
@@ -97,9 +119,8 @@ class MainActivity : AppCompatActivity() {
             //実行中の場合停止する
             sendorService.stop()
             deletePendingIntent()
-            mBtnStart.isEnabled = true
-            mBtnStart.isClickable = true
-            mBtnStart.text = "Start"
+            // 開始可能な状態の画面表示
+            updateViewStartAble()
             return
         }
 
@@ -190,6 +211,8 @@ class MainActivity : AppCompatActivity() {
     private val sensorListener = object : SensorServiceInterface {
         //
         override fun onSensorChanged(sensorType: Int, values: FloatArray) {
+
+            mTxtInfo.text = values[0].toString();
         }
 
         //
@@ -199,9 +222,7 @@ class MainActivity : AppCompatActivity() {
         //
         override fun onStatusChanged(context: Context, type: Int, data: Any) {
             if (type == 1) {
-                mBtnStart.isEnabled = true
-                mBtnStart.isClickable = true
-                mBtnStart.text = context.getString(R.string.stop)
+                updateViewStopAble()
 
 
                 // 通知バーに通知を表示する
@@ -211,16 +232,13 @@ class MainActivity : AppCompatActivity() {
             } else
                 if (type == 2) {
                     // サービスに接続出来たら、実行中かどうかを確認して、ボタンテキストを変更する。
-                    mBtnStart.isEnabled = true
-                    mBtnStart.isClickable = true
                     if (sendorService.isRunningStepCounter()) {
-                        mBtnStart.text = context.getString(R.string.stop)
-
+                        updateViewStopAble()
                         // 通知バーに通知を表示する
                         var mainAc: MainActivity = context as MainActivity
                         mainAc.showPendingIntent()
                     } else {
-                        mBtnStart.text = context.getString(R.string.start)
+                        updateViewStartAble()
                     }
                 } else
                     if (type == 101 || type == 102) {
@@ -280,6 +298,14 @@ class MainActivity : AppCompatActivity() {
         mEdtIpAddr3 = findViewById(R.id.editTextIPAddr3)
         mEdtIpAddr4 = findViewById(R.id.editTextIPAddr4)
         mEdtPortNum = findViewById(R.id.editTextPortNumber)
+
+        mLayoutNotStart = findViewById(R.id.layoutNonStart)
+        mLayoutStarted = findViewById(R.id.layoutStarted)
+
+        mTxtInfo = findViewById(R.id.text_info)
+        mTxtView = findViewById(R.id.text_view)
+
+
 
         // 数値の入力制限を設定します。
         class InputFilterMinMax : InputFilter {

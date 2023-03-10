@@ -2,17 +2,14 @@ package com.yyyso.tkpeerstepcounter
 
 
 import android.app.Service
-import android.content.ComponentName
-import android.content.Context
-import android.content.Intent
-import android.content.ServiceConnection
+import android.content.*
 import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
 import android.os.*
+import android.provider.Settings
 import android.util.Log
-import android.widget.Toast
 import java.io.OutputStream
 import java.net.InetSocketAddress
 import java.net.Socket
@@ -131,6 +128,7 @@ class SensorServiceListener : Service(), SensorEventListener {
     private val binder = LocalBinder()
     private var mIsRunningStepCounter : Boolean = false
     private var mWakeLock: PowerManager.WakeLock? = null
+    private var mWifiNeverPolocy : Int = 0
 
     // 実行中
     public fun isRunningStepCounter() : Boolean{
@@ -145,74 +143,6 @@ class SensorServiceListener : Service(), SensorEventListener {
     }
     override fun onCreate() {
         super.onCreate()
-/*
-        // "DataStore"という名前でsharedPreferenceのインスタンスを生成
-        val sharedPref = getSharedPreferences(
-            getString(R.string.preference_file_key), Context.MODE_PRIVATE)
-        // Preferenceの値から、画面を初期化します。
-        var sb : StringBuffer = StringBuffer()
-        sb.append(sharedPref.getInt(MainActivity().PROF_IP1, 192) )
-        sb.append("." )
-        sb.append(sharedPref.getInt(MainActivity().PROF_IP2, 168) )
-        sb.append("." )
-        sb.append(sharedPref.getInt(MainActivity().PROF_IP3, 1) )
-        sb.append("." )
-        sb.append(sharedPref.getInt(MainActivity().PROF_IP4, 1) )
-        var strIp : String = sb.toString()
-
-        Toast.makeText(this, strIp, Toast.LENGTH_LONG).show()
-
-        var port : Int = sharedPref.getInt(MainActivity().PROF_PORT, 1)
-
-
-        //lifecycleScope.launchWhenResumed {
-        //}
-        Thread {
-            val ip = strIp
-            val port = port
-            val address = InetSocketAddress(ip, port)
-            mSoket= Socket()
-            try {
-                if( mSoket != null) {
-                    mSoket?.connect(address, 3000)
-
-                    mIsConnected = true
-                }
-                //var sentdData : Double = 1
-                //socket.getOutputStream().write(sentdData)
-            } catch (e: Exception) {
-                Log.e("SensorServiceListener", "fail to connect peer.")
-                e.printStackTrace()
-
-                // メインアクティビティーに通知
-                val msg = Message.obtain()
-                msg.arg1 = 3
-                msg.arg2 = 1 // Soket Connect Error
-                msg.obj =e.toString()
-                if (handler != null) handler?.sendMessage(msg)
-            }
-        }.start()
-
-
-        // センサーサービスマネージャーを取得
-        val sensorManager: SensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
-        // ステップカウンターセンサーを取得
-        val accel : Sensor?  = sensorManager.getDefaultSensor(
-            Sensor.TYPE_STEP_COUNTER
-        )
-        if( accel == null) {
-            // メインアクティビティーに通知
-            val msg = Message.obtain()
-            msg.arg1 = 3
-            msg.arg2 = 2// no support Step Counter.
-            msg.obj ="no support Step Counter."
-            if (handler != null) handler?.sendMessage(msg)
-            return
-        } else {
-            // ステップカウンターセンサーのリスナーをセット
-            sensorManager.registerListener(this, accel, SensorManager.SENSOR_DELAY_NORMAL)
-        }
- */
     }
     override fun onDestroy() {
         Log.d("SensorServiceListener", "onDestroy")
@@ -258,6 +188,14 @@ class SensorServiceListener : Service(), SensorEventListener {
                         }.start()
                     }
                 }
+
+                // 画面に通知
+                val msg = Message.obtain()               // センサー値取得イベントを発生させる
+                msg.arg1 = 1                                        // センサー値取得イベントを示す値
+                msg.arg2 = event.sensor.type                        // センサーの種類を渡す
+                msg.obj = event.values.clone()                      // センサーの値をコピーして渡す
+                if (handler != null) handler?.sendMessage(msg)      // メッセージ送信
+
             }
             catch(e : Exception)
             {
@@ -323,8 +261,25 @@ class SensorServiceListener : Service(), SensorEventListener {
                 }
 
                 var pm : PowerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
-                mWakeLock = pm.newWakeLock(PowerManager.SCREEN_DIM_WAKE_LOCK, "MyApp::MyWakelockTag")
+                mWakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "MyApp::MyWakelockTag")
                 mWakeLock?.acquire()
+
+
+                // スリープ時にWifiの接続を維持する
+                try {
+                    val contentResolver: ContentResolver = getContentResolver()
+
+                    mWifiNeverPolocy =
+                        Settings.System.getInt(contentResolver, Settings.Global.WIFI_SLEEP_POLICY)
+
+                    Log.i("WIFISetting", "policy=" + mWifiNeverPolocy)
+                    if (mWifiNeverPolocy != Settings.Global.WIFI_SLEEP_POLICY_NEVER) {
+                        Settings.System.putInt(contentResolver, Settings.Global.WIFI_SLEEP_POLICY, Settings.Global.WIFI_SLEEP_POLICY_NEVER);
+                    }
+                } catch (e: Exception) {
+                    Log.e("WIFISetting", e.toString())
+                }
+
 
                 // メインアクティビティーに通知
                 mIsRunningStepCounter = true
@@ -338,16 +293,39 @@ class SensorServiceListener : Service(), SensorEventListener {
     //  ステップカウンターを停止します。
     public fun stopStepCounter(){
         try {
-            // センサーサービスマネージャーを取得
-            val sensorManager: SensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
-            // リスナーを解除します。
-            sensorManager.unregisterListener(this)
+            try {
+                // センサーサービスマネージャーを取得
+                val sensorManager: SensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
+                // リスナーを解除します。
+                sensorManager.unregisterListener(this)
+            } catch (e: Exception) {
+                Log.e("WIFISetting", e.toString())
+            }
 
-            mSoket?.close()
-            mSoket = null
 
-            mWakeLock?.release()
-            mWakeLock = null
+            // スリープ時にWifiの接続を維持の情報を元に戻す
+            try {
+                val contentResolver: ContentResolver = getContentResolver()
+                Settings.System.putInt(contentResolver, Settings.Global.WIFI_SLEEP_POLICY, mWifiNeverPolocy);
+            } catch (e: Exception) {
+                Log.e("WIFISetting", e.toString())
+            }
+
+            // ソケットを閉じる
+            try {
+                mSoket?.close()
+                mSoket = null
+            } catch (e: Exception) {
+                Log.e("WIFISetting", e.toString())
+            }
+
+            // Wake Lockの解放
+            try {
+                mWakeLock?.release()
+                mWakeLock = null
+            } catch (e: Exception) {
+                Log.e("WIFISetting", e.toString())
+            }
 
             mIsRunningStepCounter = false
         } catch (e: Exception) {
